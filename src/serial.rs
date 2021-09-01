@@ -101,6 +101,8 @@ pub mod config {
         pub wordlength: WordLength,
         pub parity: Parity,
         pub stopbits: StopBits,
+        pub clock_phase: bool,
+        pub clock_polarity: bool
     }
 
     impl Config {
@@ -150,6 +152,8 @@ pub mod config {
                 wordlength: WordLength::DataBits8,
                 parity: Parity::ParityNone,
                 stopbits: StopBits::STOP1,
+                clock_phase: false,
+                clock_polarity: false
             }
         }
     }
@@ -164,7 +168,9 @@ pub mod config {
     }
 }
 
-pub trait Pins<USART> {}
+pub trait Pins<USART> {
+    const SYNC: bool = false;
+}
 pub trait PinTx<USART> {}
 pub trait PinRx<USART> {}
 pub trait PinCk<USART> {}
@@ -174,6 +180,15 @@ where
     TX: PinTx<USART>,
     RX: PinRx<USART>,
 {
+}
+
+impl<USART, TX, RX, CK> Pins<USART> for (TX, RX, CK)
+    where
+        TX: PinTx<USART>,
+        RX: PinRx<USART>,
+        CK: PinCk<USART>
+{
+    const SYNC: bool = true;
 }
 
 /// A filler type for when the Tx pin is unnecessary
@@ -420,7 +435,8 @@ macro_rules! usart {
                     usart: $USARTX,
                     config: impl Into<config::Config>,
                     prec: rec::$Rec,
-                    clocks: &CoreClocks
+                    clocks: &CoreClocks,
+                    sync: bool
                 ) -> Result<Self, config::InvalidConfig>
                 {
                     use crate::stm32::usart1::cr2::STOP_A as STOP;
@@ -464,7 +480,28 @@ macro_rules! usart {
                             StopBits::STOP1 => STOP::STOP1,
                             StopBits::STOP1P5 => STOP::STOP1P5,
                             StopBits::STOP2 => STOP::STOP2,
-                        })
+                        });
+
+                        w.clken().variant(if sync {
+                            CLKEN_A::ENABLED
+                        } else {
+                            CLKEN_A::DISABLED
+                        });
+
+                        // TODO: right order?
+                        w.cpol().variant(if config.clock_polarity {
+                            CPOL::HIGH
+                        } else {
+                            CPOL::LOW
+                        });
+
+                        // TODO: right order?
+                        w.cpha().variant(if config.clock_phase {
+                            CPHA_A::FIRST
+                        } else {
+                            CPHA_A::SECOND
+                        });
+
                     });
 
                     // Enable transmission and receiving
@@ -607,14 +644,14 @@ macro_rules! usart {
             impl SerialExt<$USARTX> for $USARTX {
                 type Rec = rec::$Rec;
 
-                fn serial(self,
-                         _pins: impl Pins<$USARTX>,
+                fn serial<P: Pins<$USARTX>>(self,
+                         _pins: P,
                          config: impl Into<config::Config>,
                          prec: rec::$Rec,
                          clocks: &CoreClocks
                 ) -> Result<Serial<$USARTX>, config::InvalidConfig>
                 {
-                    Serial::$usartX(self, config, prec, clocks)
+                    Serial::$usartX(self, config, prec, clocks, Pins::SYNC)
                 }
 
                 fn serial_unchecked(self,
