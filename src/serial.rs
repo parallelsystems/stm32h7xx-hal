@@ -20,7 +20,7 @@ use crate::stm32::rcc::d2ccip2r::{USART16SEL_A, USART234578SEL_A};
 
 use crate::stm32::{UART4, UART5, UART7, UART8};
 use crate::stm32::{USART1, USART2, USART3, USART6};
-use stm32::usart1::cr2::{CLKEN_A, CPOL_A, CPHA_A};
+use stm32::usart1::cr2::{CLKEN_A, CPOL_A, CPHA_A, LBCL_A, MSBFIRST_A};
 
 use crate::gpio::gpioa::{
     PA0, PA1, PA10, PA11, PA12, PA15, PA2, PA3, PA4, PA8, PA9,
@@ -97,12 +97,18 @@ pub mod config {
         STOP1P5,
     }
 
+    pub enum Endianness {
+        Little,
+        Big
+    }
+
     pub struct Config {
         pub baudrate: Hertz,
         pub wordlength: WordLength,
         pub parity: Parity,
         pub stopbits: StopBits,
         pub clock_phase: bool,
+        pub endianness: Endianness,
         pub clock_polarity: bool
     }
 
@@ -154,6 +160,7 @@ pub mod config {
                 parity: Parity::ParityNone,
                 stopbits: StopBits::STOP1,
                 clock_phase: false,
+                endianness: Endianness::Little,
                 clock_polarity: false
             }
         }
@@ -483,6 +490,12 @@ macro_rules! usart {
                             StopBits::STOP2 => STOP::STOP2,
                         });
 
+                        w.msbfirst().variant(match config.endianness {
+                            Endianness::Little => MSBFIRST_A::LSB,
+                            Endianness::Big => MSBFIRST_A::MSB,
+                        });
+
+                        w.lbcl().variant(LBCL_A::OUTPUT);
                         w.clken().variant(if sync {
                             CLKEN_A::ENABLED
                         } else {
