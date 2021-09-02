@@ -20,6 +20,7 @@ use crate::stm32::rcc::d2ccip2r::{USART16SEL_A, USART234578SEL_A};
 
 use crate::stm32::{UART4, UART5, UART7, UART8};
 use crate::stm32::{USART1, USART2, USART3, USART6};
+use stm32::usart1::cr2::{CLKEN_A, CPOL_A, CPHA_A};
 
 use crate::gpio::gpioa::{
     PA0, PA1, PA10, PA11, PA12, PA15, PA2, PA3, PA4, PA8, PA9,
@@ -383,9 +384,9 @@ pub struct Tx<USART> {
 pub trait SerialExt<USART>: Sized {
     type Rec: ResetEnable;
 
-    fn serial(
+    fn serial<P: Pins<USART>>(
         self,
-        _pins: impl Pins<USART>,
+        _pins: P,
         config: impl Into<config::Config>,
         prec: Self::Rec,
         clocks: &CoreClocks,
@@ -490,9 +491,9 @@ macro_rules! usart {
 
                         // TODO: right order?
                         w.cpol().variant(if config.clock_polarity {
-                            CPOL::HIGH
+                            CPOL_A::HIGH
                         } else {
-                            CPOL::LOW
+                            CPOL_A::LOW
                         });
 
                         // TODO: right order?
@@ -500,7 +501,7 @@ macro_rules! usart {
                             CPHA_A::FIRST
                         } else {
                             CPHA_A::SECOND
-                        });
+                        })
 
                     });
 
