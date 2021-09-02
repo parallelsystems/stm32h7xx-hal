@@ -652,7 +652,7 @@ macro_rules! usart {
                          clocks: &CoreClocks
                 ) -> Result<Serial<$USARTX>, config::InvalidConfig>
                 {
-                    Serial::$usartX(self, config, prec, clocks, Pins::SYNC)
+                    Serial::$usartX(self, config, prec, clocks, P::SYNC)
                 }
 
                 fn serial_unchecked(self,
@@ -661,7 +661,7 @@ macro_rules! usart {
                                    clocks: &CoreClocks
                 ) -> Result<Serial<$USARTX>, config::InvalidConfig>
                 {
-                    Serial::$usartX(self, config, prec, clocks)
+                    Serial::$usartX(self, config, prec, clocks, false)
                 }
             }
 
