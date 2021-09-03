@@ -97,9 +97,9 @@ pub mod config {
         STOP1P5,
     }
 
-    pub enum Endianness {
-        Little,
-        Big
+    pub enum BitOrder {
+        Lsb,
+        Msb
     }
 
     pub struct Config {
@@ -108,8 +108,11 @@ pub mod config {
         pub parity: Parity,
         pub stopbits: StopBits,
         pub clock_phase: bool,
-        pub endianness: Endianness,
-        pub clock_polarity: bool
+        pub bit_order: BitOrder,
+        pub clock_polarity: bool,
+
+        /// TODO: should we rename this?
+        pub last_clock_data_pulse: bool
     }
 
     impl Config {
@@ -160,8 +163,9 @@ pub mod config {
                 parity: Parity::ParityNone,
                 stopbits: StopBits::STOP1,
                 clock_phase: false,
-                endianness: Endianness::Little,
-                clock_polarity: false
+                bit_order: BitOrder::Lsb,
+                clock_polarity: false,
+                last_clock_data_pulse: false
             }
         }
     }
@@ -490,12 +494,17 @@ macro_rules! usart {
                             StopBits::STOP2 => STOP::STOP2,
                         });
 
-                        w.msbfirst().variant(match config.endianness {
-                            Endianness::Little => MSBFIRST_A::LSB,
-                            Endianness::Big => MSBFIRST_A::MSB,
+                        w.msbfirst().variant(match config.bit_order {
+                            BitOrder::Lsb => MSBFIRST_A::LSB,
+                            BitOrder::Msb => MSBFIRST_A::MSB,
                         });
 
-                        w.lbcl().variant(LBCL_A::OUTPUT);
+                        w.lbcl().variant(if config.last_clock_data_pulse {
+                             LBCL_A::OUTPUT
+                        } else {
+                             LBCL_A::NOTOUTPUT
+                        });
+
                         w.clken().variant(if sync {
                             CLKEN_A::ENABLED
                         } else {
