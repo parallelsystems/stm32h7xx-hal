@@ -20,7 +20,7 @@ use crate::stm32::rcc::d2ccip2r::{USART16SEL_A, USART234578SEL_A};
 
 use crate::stm32::{UART4, UART5, UART7, UART8};
 use crate::stm32::{USART1, USART2, USART3, USART6};
-use stm32::usart1::cr2::{CLKEN_A, CPOL_A, CPHA_A, MSBFIRST_A};
+use stm32::usart1::cr2::{CLKEN_A, CPOL_A, CPHA_A, LBCL_A, MSBFIRST_A};
 
 use crate::gpio::gpioa::{
     PA0, PA1, PA10, PA11, PA12, PA15, PA2, PA3, PA4, PA8, PA9,
@@ -110,6 +110,9 @@ pub mod config {
         pub clock_phase: bool,
         pub bit_order: BitOrder,
         pub clock_polarity: bool,
+
+        /// TODO: should we rename this?
+        pub last_clock_data_pulse: bool
     }
 
     impl Config {
@@ -162,6 +165,7 @@ pub mod config {
                 clock_phase: false,
                 bit_order: BitOrder::Lsb,
                 clock_polarity: false,
+                last_clock_data_pulse: false
             }
         }
     }
@@ -493,6 +497,12 @@ macro_rules! usart {
                         w.msbfirst().variant(match config.bit_order {
                             BitOrder::Lsb => MSBFIRST_A::LSB,
                             BitOrder::Msb => MSBFIRST_A::MSB,
+                        });
+
+                        w.lbcl().variant(if config.last_clock_data_pulse {
+                             LBCL_A::OUTPUT
+                        } else {
+                             LBCL_A::NOTOUTPUT
                         });
 
                         w.clken().variant(if sync {
