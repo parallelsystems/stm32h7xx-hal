@@ -117,12 +117,10 @@ pub mod config {
         pub wordlength: WordLength,
         pub parity: Parity,
         pub stopbits: StopBits,
-        pub clock_phase: ClockPhase,
-        pub bit_order: BitOrder,
-        pub clock_polarity: ClockPolarity,
-
-        /// TODO: should we rename this?
-        pub clock_last_data_pulse: bool
+        pub clockphase: ClockPhase,
+        pub bitorder: BitOrder,
+        pub clockpolarity: ClockPolarity,
+        pub lastbitclockpulse: bool
     }
 
     impl Config {
@@ -172,10 +170,10 @@ pub mod config {
                 wordlength: WordLength::DataBits8,
                 parity: Parity::ParityNone,
                 stopbits: StopBits::STOP1,
-                clock_phase: ClockPhase::First,
-                bit_order: BitOrder::Lsb,
-                clock_polarity: ClockPolarity::Low,
-                clock_last_data_pulse: false
+                clockphase: ClockPhase::First,
+                bitorder: BitOrder::Lsb,
+                clockpolarity: ClockPolarity::Low,
+                lastbitclockpulse: false
             }
         }
     }
@@ -504,12 +502,12 @@ macro_rules! usart {
                             StopBits::STOP2 => STOP::STOP2,
                         });
 
-                        w.msbfirst().variant(match config.bit_order {
+                        w.msbfirst().variant(match config.bitorder {
                             BitOrder::Lsb => MSBFIRST_A::LSB,
                             BitOrder::Msb => MSBFIRST_A::MSB,
                         });
 
-                        w.lbcl().variant(if config.clock_last_data_pulse {
+                        w.lbcl().variant(if config.lastbitclockpulse {
                              LBCL_A::OUTPUT
                         } else {
                              LBCL_A::NOTOUTPUT
@@ -521,12 +519,12 @@ macro_rules! usart {
                             CLKEN_A::DISABLED
                         });
 
-                        w.cpol().variant(match config.clock_polarity {
+                        w.cpol().variant(match config.clockpolarity {
                             ClockPolarity::High =>CPOL_A::HIGH,
                             ClockPolarity::Low =>CPOL_A::LOW
                         });
 
-                        w.cpha().variant(match config.clock_phase {
+                        w.cpha().variant(match config.clockphase {
                             ClockPhase::First => CPHA_A::FIRST,
                             ClockPhase::Second => CPHA_A::SECOND
                         })
