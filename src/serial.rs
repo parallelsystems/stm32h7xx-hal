@@ -98,8 +98,8 @@ pub mod config {
     }
 
     pub enum BitOrder {
-        Lsb,
-        Msb
+        LsbFirst,
+        MsbFirst
     }
 
     pub enum ClockPhase {
@@ -108,8 +108,8 @@ pub mod config {
     }
 
     pub enum ClockPolarity {
-        High,
-        Low
+        IdleHigh,
+        IdleLow
     }
 
     pub struct Config {
@@ -171,8 +171,8 @@ pub mod config {
                 parity: Parity::ParityNone,
                 stopbits: StopBits::STOP1,
                 clockphase: ClockPhase::First,
-                bitorder: BitOrder::Lsb,
-                clockpolarity: ClockPolarity::Low,
+                bitorder: BitOrder::LsbFirst,
+                clockpolarity: ClockPolarity::IdleLow,
                 lastbitclockpulse: false
             }
         }
@@ -189,7 +189,7 @@ pub mod config {
 }
 
 pub trait Pins<USART> {
-    const SYNC: bool = false;
+    const SYNCHRONOUS: bool = false;
 }
 pub trait PinTx<USART> {}
 pub trait PinRx<USART> {}
@@ -208,7 +208,7 @@ impl<USART, TX, RX, CK> Pins<USART> for (TX, RX, CK)
         RX: PinRx<USART>,
         CK: PinCk<USART>
 {
-    const SYNC: bool = true;
+    const SYNCHRONOUS: bool = true;
 }
 
 /// A filler type for when the Tx pin is unnecessary
@@ -456,7 +456,7 @@ macro_rules! usart {
                     config: impl Into<config::Config>,
                     prec: rec::$Rec,
                     clocks: &CoreClocks,
-                    sync: bool
+                    synchronous: bool
                 ) -> Result<Self, config::InvalidConfig>
                 {
                     use crate::stm32::usart1::cr2::STOP_A as STOP;
@@ -503,8 +503,8 @@ macro_rules! usart {
                         });
 
                         w.msbfirst().variant(match config.bitorder {
-                            BitOrder::Lsb => MSBFIRST_A::LSB,
-                            BitOrder::Msb => MSBFIRST_A::MSB,
+                            BitOrder::LsbFirst => MSBFIRST_A::LSB,
+                            BitOrder::MsbFirst => MSBFIRST_A::MSB,
                         });
 
                         w.lbcl().variant(if config.lastbitclockpulse {
@@ -513,15 +513,15 @@ macro_rules! usart {
                              LBCL_A::NOTOUTPUT
                         });
 
-                        w.clken().variant(if sync {
+                        w.clken().variant(if synchronous {
                             CLKEN_A::ENABLED
                         } else {
                             CLKEN_A::DISABLED
                         });
 
                         w.cpol().variant(match config.clockpolarity {
-                            ClockPolarity::High =>CPOL_A::HIGH,
-                            ClockPolarity::Low =>CPOL_A::LOW
+                            ClockPolarity::IdleHigh =>CPOL_A::HIGH,
+                            ClockPolarity::IdleLow =>CPOL_A::LOW
                         });
 
                         w.cpha().variant(match config.clockphase {
@@ -678,7 +678,7 @@ macro_rules! usart {
                          clocks: &CoreClocks
                 ) -> Result<Serial<$USARTX>, config::InvalidConfig>
                 {
-                    Serial::$usartX(self, config, prec, clocks, P::SYNC)
+                    Serial::$usartX(self, config, prec, clocks, P::SYNCHRONOUS)
                 }
 
                 fn serial_unchecked(self,
