@@ -102,17 +102,27 @@ pub mod config {
         Msb
     }
 
+    pub enum ClockPhase {
+        First,
+        Second
+    }
+
+    pub enum ClockPolarity {
+        High,
+        Low
+    }
+
     pub struct Config {
         pub baudrate: Hertz,
         pub wordlength: WordLength,
         pub parity: Parity,
         pub stopbits: StopBits,
-        pub clock_phase: bool,
+        pub clock_phase: ClockPhase,
         pub bit_order: BitOrder,
-        pub clock_polarity: bool,
+        pub clock_polarity: ClockPolarity,
 
         /// TODO: should we rename this?
-        pub last_clock_data_pulse: bool
+        pub clock_last_data_pulse: bool
     }
 
     impl Config {
@@ -162,10 +172,10 @@ pub mod config {
                 wordlength: WordLength::DataBits8,
                 parity: Parity::ParityNone,
                 stopbits: StopBits::STOP1,
-                clock_phase: false,
+                clock_phase: ClockPhase::First,
                 bit_order: BitOrder::Lsb,
-                clock_polarity: false,
-                last_clock_data_pulse: false
+                clock_polarity: ClockPolarity::Low,
+                clock_last_data_pulse: false
             }
         }
     }
@@ -499,7 +509,7 @@ macro_rules! usart {
                             BitOrder::Msb => MSBFIRST_A::MSB,
                         });
 
-                        w.lbcl().variant(if config.last_clock_data_pulse {
+                        w.lbcl().variant(if config.clock_last_data_pulse {
                              LBCL_A::OUTPUT
                         } else {
                              LBCL_A::NOTOUTPUT
@@ -511,18 +521,14 @@ macro_rules! usart {
                             CLKEN_A::DISABLED
                         });
 
-                        // TODO: right order?
-                        w.cpol().variant(if config.clock_polarity {
-                            CPOL_A::HIGH
-                        } else {
-                            CPOL_A::LOW
+                        w.cpol().variant(match config.clock_polarity {
+                            ClockPolarity::High =>CPOL_A::HIGH,
+                            ClockPolarity::Low =>CPOL_A::LOW
                         });
 
-                        // TODO: right order?
-                        w.cpha().variant(if config.clock_phase {
-                            CPHA_A::FIRST
-                        } else {
-                            CPHA_A::SECOND
+                        w.cpha().variant(match config.clock_phase {
+                            ClockPhase::First => CPHA_A::FIRST,
+                            ClockPhase::Second => CPHA_A::SECOND
                         })
 
                     });
