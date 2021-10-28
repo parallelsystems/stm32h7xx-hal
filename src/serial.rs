@@ -92,21 +92,25 @@ pub mod config {
         STOP1P5,
     }
 
+    #[derive(Copy, Clone, PartialEq)]
     pub enum BitOrder {
         LsbFirst,
         MsbFirst,
     }
 
+    #[derive(Copy, Clone, PartialEq)]
     pub enum ClockPhase {
         First,
         Second,
     }
 
+    #[derive(Copy, Clone, PartialEq)]
     pub enum ClockPolarity {
         IdleHigh,
         IdleLow,
     }
 
+    #[derive(Copy, Clone, PartialEq)]
     pub struct Config {
         pub baudrate: Hertz,
         pub wordlength: WordLength,
