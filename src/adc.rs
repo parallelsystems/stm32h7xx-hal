@@ -10,19 +10,13 @@
 //! - [Using ADC1 and ADC2 together](https://github.com/stm32-rs/stm32h7xx-hal/blob/master/examples/adc12.rs)
 //! - [Using ADC1 and ADC2 in parallel](https://github.com/stm32-rs/stm32h7xx-hal/blob/master/examples/adc12_parallel.rs)
 
-use crate::hal::adc::{Channel, OneShot};
-use crate::hal::blocking::delay::DelayUs;
-
 use core::convert::Infallible;
 use core::marker::PhantomData;
 
 use nb::block;
-
-#[cfg(feature = "rm0455")]
-use crate::stm32::ADC12_COMMON;
-use crate::stm32::{ADC1, ADC2};
-#[cfg(not(feature = "rm0455"))]
-use crate::stm32::{ADC3, ADC3_COMMON};
+use stm32h7::stm32h743v::adc3::cfgr::DMNGT_A;
+use crate::dma::PeripheralToMemory;
+use crate::dma::traits::TargetAddress;
 
 use crate::gpio::gpioa::{PA0, PA1, PA2, PA3, PA4, PA5, PA6, PA7};
 use crate::gpio::gpiob::{PB0, PB1};
@@ -33,8 +27,15 @@ use crate::gpio::gpiof::{PF11, PF12, PF13, PF14};
 #[cfg(not(feature = "rm0455"))]
 use crate::gpio::gpioh::{PH2, PH3, PH4, PH5};
 use crate::gpio::Analog;
+use crate::hal::adc::{Channel, OneShot};
+use crate::hal::blocking::delay::DelayUs;
 use crate::rcc::rec::AdcClkSelGetter;
 use crate::rcc::{rec, CoreClocks, ResetEnable};
+#[cfg(feature = "rm0455")]
+use crate::stm32::ADC12_COMMON;
+use crate::stm32::{ADC1, ADC2};
+#[cfg(not(feature = "rm0455"))]
+use crate::stm32::{ADC3, ADC3_COMMON};
 use crate::time::Hertz;
 
 #[cfg(not(feature = "revision_v"))]
@@ -47,6 +48,107 @@ const ADC_KER_CK_MAX: u32 = 100_000_000;
 pub type Resolution = crate::stm32::adc3::cfgr::RES_A;
 #[cfg(any(feature = "rm0455", feature = "rm0468"))]
 pub type Resolution = crate::stm32::adc1::cfgr::RES_A;
+
+pub trait HalEnabledAdc: HalAdc + TargetAddress<PeripheralToMemory, MemSize=u32> {
+    type Disabled: HalDisabledAdc<Enabled = Self>;
+
+    /// Start conversion
+    ///
+    /// This method will start reading sequence on the given pin.
+    /// The value can be then read through the `read_sample` method.
+    // Refer to RM0433 Rev 6 - Chapter 24.4.16
+    fn start_conversion<PIN>(&mut self, _pin: &mut PIN)
+    where
+        PIN: Channel<Self::Pac, ID = u8>;
+
+    /// Read sample
+    ///
+    /// `nb::Error::WouldBlock` in case the conversion is still
+    /// progressing.
+    // Refer to RM0433 Rev 6 - Chapter 24.4.16
+    fn read_sample(&mut self) -> nb::Result<u32, Infallible>;
+
+    /// Disable ADC
+    fn disable(self) -> Self::Disabled;
+}
+
+pub trait HalDisabledAdc: HalAdc {
+    type Enabled: HalEnabledAdc<Disabled = Self>;
+
+    /// Set the DMA property of the ADC
+    fn dma(&mut self, dma: Option<Dma>);
+
+    /// Disables Deeppowerdown-mode and enables voltage regulator
+    ///
+    /// Note: After power-up, a [`calibration`](#method.calibrate) shall be run
+    fn power_up(&mut self, delay: &mut impl DelayUs<u8>);
+
+    /// Enables Deeppowerdown-mode and disables voltage regulator
+    ///
+    /// Note: This resets the [`calibration`](#method.calibrate) of the ADC
+    fn power_down(&mut self);
+
+    /// Calibrates the ADC in single channel mode
+    ///
+    /// Note: The ADC must be disabled
+    fn calibrate(&mut self);
+
+    /// Enable ADC
+    fn enable(self) -> Self::Enabled;
+}
+
+pub trait HalAdc {
+    type Pac;
+
+    /// Get the inner ADC
+    fn inner(&self) -> &Self::Pac;
+
+    /// Get the inner ADC as mutable
+    fn inner_mut(&mut self) -> &mut Self::Pac;
+
+    /// Save current ADC config
+    fn save_cfg(&mut self) -> StoredConfig;
+
+    /// Restore saved ADC config
+    fn restore_cfg(&mut self, cfg: StoredConfig);
+
+    /// Reset the ADC config to default, return existing config
+    fn default_cfg(&mut self) -> StoredConfig;
+
+    /// Get ADC sampling time
+    fn get_sample_time(&self) -> AdcSampleTime;
+
+    /// Get ADC sampling resolution
+    fn get_resolution(&self) -> Resolution;
+
+    /// Get ADC lshift value
+    fn get_lshift(&self) -> AdcLshift;
+
+    /// Set ADC sampling time
+    ///
+    /// Options can be found in [AdcSampleTime](crate::adc::AdcSampleTime).
+    fn set_sample_time(&mut self, t_samp: AdcSampleTime);
+
+    /// Set ADC sampling resolution
+    fn set_resolution(&mut self, res: Resolution);
+
+    /// Set ADC lshift
+    ///
+    /// LSHIFT\[3:0\] must be in range of 0..=15
+    fn set_lshift(&mut self, lshift: AdcLshift);
+
+    /// Returns the largest possible sample value for the current settings
+    fn max_sample(&self) -> u32;
+
+    /// Returns the offset calibration value for single ended channel
+    fn read_offset_calibration_value(&self) -> AdcCalOffset;
+
+    /// Returns the linear calibration values stored in an array in the following order:
+    /// LINCALRDYW1 -> result\[0\]
+    /// ...
+    /// LINCALRDYW6 -> result\[5\]
+    fn read_linear_calibration_values(&mut self) -> AdcCalLinear;
+}
 
 trait NumberOfBits {
     fn number_of_bits(&self) -> u32;
@@ -72,6 +174,15 @@ pub struct Disabled;
 pub trait ED {}
 impl ED for Enabled {}
 impl ED for Disabled {}
+
+/// The type of DMA being used
+#[derive(Copy, Clone, Eq, PartialEq)]
+pub enum Dma {
+    /// Single transfer
+    OneShot,
+    /// Continuous, repeating transfer
+    Circular,
+}
 
 pub struct Adc<ADC, ED> {
     rb: ADC,
@@ -228,7 +339,7 @@ pub struct Vbat;
 pub struct Temperature;
 
 // Not implementing Pxy_C adc pins
-// Just implmenting INPx pins (INNx defaulting to V_ref-)
+// Just implementing INPx pins (INNx defaulting to V_ref-)
 //
 // Refer to DS12110 Rev 7 - Chapter 5 (Table 9)
 adc_pins!(ADC1,
@@ -470,6 +581,7 @@ macro_rules! adc_hal {
 
                     adc
                 }
+
                 /// Creates ADC with default settings
                 fn default_from_rb(rb: $ADC) -> Self {
                     Self {
@@ -480,45 +592,6 @@ macro_rules! adc_hal {
                         current_channel: None,
                         _enabled: PhantomData,
                     }
-                }
-                /// Disables Deeppowerdown-mode and enables voltage regulator
-                ///
-                /// Note: After power-up, a [`calibration`](#method.calibrate) shall be run
-                pub fn power_up(&mut self, delay: &mut impl DelayUs<u8>) {
-                    // Refer to RM0433 Rev 6 - Chapter 24.4.6
-                    self.rb.cr.modify(|_, w|
-                        w.deeppwd().clear_bit()
-                            .advregen().set_bit()
-                    );
-                    delay.delay_us(10_u8);
-                }
-
-                /// Enables Deeppowerdown-mode and disables voltage regulator
-                ///
-                /// Note: This resets the [`calibration`](#method.calibrate) of the ADC
-                pub fn power_down(&mut self) {
-                    // Refer to RM0433 Rev 6 - Chapter 24.4.6
-                    self.rb.cr.modify(|_, w|
-                        w.deeppwd().set_bit()
-                            .advregen().clear_bit()
-                    );
-                }
-
-                /// Calibrates the ADC in single channel mode
-                ///
-                /// Note: The ADC must be disabled
-                pub fn calibrate(&mut self) {
-                    // Refer to RM0433 Rev 6 - Chapter 24.4.8
-                    self.check_calibration_conditions();
-
-                    // single channel (INNx equals to V_ref-)
-                    self.rb.cr.modify(|_, w|
-                        w.adcaldif().clear_bit()
-                            .adcallin().set_bit()
-                    );
-                    // calibrate
-                    self.rb.cr.modify(|_, w| w.adcal().set_bit());
-                    while self.rb.cr.read().adcal().bit_is_set() {}
                 }
 
                 fn check_calibration_conditions(&self) {
@@ -532,6 +605,7 @@ macro_rules! adc_hal {
                         panic!("Cannot start calibration when the ADC voltage regulator is disabled");
                     }
                 }
+
 
                 /// Configuration process prior to enabling the ADC
                 ///
@@ -564,8 +638,55 @@ macro_rules! adc_hal {
                     self.rb.cr.modify(|_, w| w.boost().lt50());
                 }
 
-                /// Enable ADC
-                pub fn enable(mut self) -> Adc<$ADC, Enabled> {
+            }
+
+            impl HalDisabledAdc for Adc<$ADC, Disabled> {
+                type Enabled = Adc<$ADC, Enabled>;
+
+                fn dma(&mut self, dma: Option<Dma>){
+                    let variant = match dma {
+                        None => DMNGT_A::DR,
+                        Some(Dma::OneShot) => DMNGT_A::DMA_ONESHOT,
+                        Some(Dma::Circular) => DMNGT_A::DMA_CIRCULAR,
+                    };
+
+                    self.rb.cfgr.modify(|_,w|{
+                        w.dmngt().variant(variant)
+                    });
+                }
+
+                fn power_up(&mut self, delay: &mut impl DelayUs<u8>) {
+                    // Refer to RM0433 Rev 6 - Chapter 24.4.6
+                    self.rb.cr.modify(|_, w|
+                        w.deeppwd().clear_bit()
+                            .advregen().set_bit()
+                    );
+                    delay.delay_us(10_u8);
+                }
+
+                fn power_down(&mut self) {
+                    // Refer to RM0433 Rev 6 - Chapter 24.4.6
+                    self.rb.cr.modify(|_, w|
+                        w.deeppwd().set_bit()
+                            .advregen().clear_bit()
+                    );
+                }
+
+                fn calibrate(&mut self) {
+                    // Refer to RM0433 Rev 6 - Chapter 24.4.8
+                    self.check_calibration_conditions();
+
+                    // single channel (INNx equals to V_ref-)
+                    self.rb.cr.modify(|_, w|
+                        w.adcaldif().clear_bit()
+                            .adcallin().set_bit()
+                    );
+                    // calibrate
+                    self.rb.cr.modify(|_, w| w.adcal().set_bit());
+                    while self.rb.cr.read().adcal().bit_is_set() {}
+                }
+
+                fn enable(mut self) -> Adc<Self::Pac, Enabled> {
                     // Refer to RM0433 Rev 6 - Chapter 24.4.9
                     self.rb.isr.modify(|_, w| w.adrdy().set_bit());
                     self.rb.cr.modify(|_, w| w.aden().set_bit());
@@ -622,14 +743,28 @@ macro_rules! adc_hal {
                     }
                 }
 
-                /// Start conversion
-                ///
-                /// This method will start reading sequence on the given pin.
-                /// The value can be then read through the `read_sample` method.
-                // Refer to RM0433 Rev 6 - Chapter 24.4.16
-                pub fn start_conversion<PIN>(&mut self, _pin: &mut PIN)
-                    where PIN: Channel<$ADC, ID = u8>,
-                {
+                fn check_conversion_conditions(&self) {
+                    // Ensure that no conversions are ongoing
+                    if self.rb.cr.read().adstart().bit_is_set() {
+                        panic!("Cannot start conversion because a regular conversion is ongoing");
+                    }
+                    if self.rb.cr.read().jadstart().bit_is_set() {
+                        panic!("Cannot start conversion because an injected conversion is ongoing");
+                    }
+                    // Ensure that the ADC is enabled
+                    if self.rb.cr.read().aden().bit_is_clear() {
+                        panic!("Cannot start conversion because ADC is currently disabled");
+                    }
+                    if self.rb.cr.read().addis().bit_is_set() {
+                        panic!("Cannot start conversion because there is a pending request to disable the ADC");
+                    }
+                }
+            }
+
+            impl HalEnabledAdc for Adc<$ADC, Enabled> {
+                type Disabled = Adc<$ADC, Disabled>;
+
+                fn start_conversion<PIN>(&mut self, _pin: &mut PIN)where PIN: Channel<Self::Pac, ID = u8> {
                     let chan = PIN::channel();
                     assert!(chan <= 19);
 
@@ -654,12 +789,7 @@ macro_rules! adc_hal {
                     self.rb.cr.modify(|_, w| w.adstart().set_bit());
                 }
 
-                /// Read sample
-                ///
-                /// `nb::Error::WouldBlock` in case the conversion is still
-                /// progressing.
-                // Refer to RM0433 Rev 6 - Chapter 24.4.16
-                pub fn read_sample(&mut self) -> nb::Result<u32, Infallible> {
+                fn read_sample(&mut self) -> nb::Result<u32, Infallible> {
                     let chan = self.current_channel.expect("No channel was selected, use start_conversion first");
 
                     // Check if the conversion is finished
@@ -676,25 +806,8 @@ macro_rules! adc_hal {
                     nb::Result::Ok(result)
                 }
 
-                fn check_conversion_conditions(&self) {
-                    // Ensure that no conversions are ongoing
-                    if self.rb.cr.read().adstart().bit_is_set() {
-                        panic!("Cannot start conversion because a regular conversion is ongoing");
-                    }
-                    if self.rb.cr.read().jadstart().bit_is_set() {
-                        panic!("Cannot start conversion because an injected conversion is ongoing");
-                    }
-                    // Ensure that the ADC is enabled
-                    if self.rb.cr.read().aden().bit_is_clear() {
-                        panic!("Cannot start conversion because ADC is currently disabled");
-                    }
-                    if self.rb.cr.read().addis().bit_is_set() {
-                        panic!("Cannot start conversion because there is a pending request to disable the ADC");
-                    }
-                }
-
                 /// Disable ADC
-                pub fn disable(mut self) -> Adc<$ADC, Disabled> {
+                fn disable(mut self) -> Adc<$ADC, Disabled> {
                     // Refer to RM0433 Rev 6 - Chapter 24.4.9
                     if self.rb.cr.read().adstart().bit_is_set() {
                         self.stop_regular_conversion();
@@ -718,20 +831,42 @@ macro_rules! adc_hal {
             }
 
             impl<ED> Adc<$ADC, ED> {
-                /// Save current ADC config
-                pub fn save_cfg(&mut self) -> StoredConfig {
+                fn check_linear_read_conditions(&self) {
+                    // Ensure the ADC is enabled and is not in deeppowerdown-mode
+                    if self.rb.cr.read().deeppwd().bit_is_set() {
+                        panic!("Cannot read linear calibration value when the ADC is in deeppowerdown-mode");
+                    }
+                    if self.rb.cr.read().advregen().bit_is_clear() {
+                        panic!("Cannot read linear calibration value when the voltage regulator is disabled");
+                    }
+                    if self.rb.cr.read().aden().bit_is_clear() {
+                        panic!("Cannot read linear calibration value when the ADC is disabled");
+                    }
+                }
+            }
+
+            impl<ED> HalAdc for Adc<$ADC, ED> {
+                type Pac = $ADC;
+
+                fn inner(&self) -> &Self::Pac {
+                    &self.rb
+                }
+
+                fn inner_mut(&mut self) -> &mut Self::Pac {
+                    &mut self.rb
+                }
+
+                fn save_cfg(&mut self) -> StoredConfig {
                     StoredConfig(self.get_sample_time(), self.get_resolution(), self.get_lshift())
                 }
 
-                /// Restore saved ADC config
-                pub fn restore_cfg(&mut self, cfg: StoredConfig) {
+                fn restore_cfg(&mut self, cfg: StoredConfig) {
                     self.set_sample_time(cfg.0);
                     self.set_resolution(cfg.1);
                     self.set_lshift(cfg.2);
                 }
 
-                /// Reset the ADC config to default, return existing config
-                pub fn default_cfg(&mut self) -> StoredConfig {
+                fn default_cfg(&mut self) -> StoredConfig {
                     let cfg = self.save_cfg();
                     self.set_sample_time(AdcSampleTime::default());
                     self.set_resolution(Resolution::SIXTEENBIT);
@@ -739,55 +874,39 @@ macro_rules! adc_hal {
                     cfg
                 }
 
-                /// Get ADC samping time
-                pub fn get_sample_time(&self) -> AdcSampleTime {
+                fn get_sample_time(&self) -> AdcSampleTime {
                     self.sample_time
                 }
 
-                /// Get ADC sampling resolution
-                pub fn get_resolution(&self) -> Resolution {
+                fn get_resolution(&self) -> Resolution {
                     self.resolution
                 }
 
-                /// Get ADC lshift value
-                pub fn get_lshift(&self) -> AdcLshift {
+                fn get_lshift(&self) -> AdcLshift {
                     self.lshift
                 }
 
-                /// Set ADC sampling time
-                ///
-                /// Options can be found in [AdcSampleTime](crate::adc::AdcSampleTime).
-                pub fn set_sample_time(&mut self, t_samp: AdcSampleTime) {
+                fn set_sample_time(&mut self, t_samp: AdcSampleTime) {
                     self.sample_time = t_samp;
                 }
 
-                /// Set ADC sampling resolution
-                pub fn set_resolution(&mut self, res: Resolution) {
+                fn set_resolution(&mut self, res: Resolution) {
                     self.resolution = res;
                 }
 
-                /// Set ADC lshift
-                ///
-                /// LSHIFT\[3:0\] must be in range of 0..=15
-                pub fn set_lshift(&mut self, lshift: AdcLshift) {
+                fn set_lshift(&mut self, lshift: AdcLshift) {
                     self.lshift = lshift;
                 }
 
-                /// Returns the largest possible sample value for the current settings
-                pub fn max_sample(&self) -> u32 {
+                fn max_sample(&self) -> u32 {
                     ((1 << self.get_resolution().number_of_bits() as u32) - 1) << self.get_lshift().value() as u32
                 }
 
-                                /// Returns the offset calibration value for single ended channel
-                pub fn read_offset_calibration_value(&self) -> AdcCalOffset {
+                fn read_offset_calibration_value(&self) -> AdcCalOffset {
                     AdcCalOffset(self.rb.calfact.read().calfact_s().bits())
                 }
 
-                /// Returns the linear calibration values stored in an array in the following order:
-                /// LINCALRDYW1 -> result\[0\]
-                /// ...
-                /// LINCALRDYW6 -> result\[5\]
-                pub fn read_linear_calibration_values(&mut self) -> AdcCalLinear {
+                fn read_linear_calibration_values(&mut self) -> AdcCalLinear {
                     // Refer to RM0433 Rev 6 - Chapter 24.4.8 (Page 920)
                     self.check_linear_read_conditions();
 
@@ -822,19 +941,6 @@ macro_rules! adc_hal {
                     let res_6 = self.rb.calfact2.read().lincalfact().bits();
 
                     AdcCalLinear([res_1, res_2, res_3, res_4, res_5, res_6])
-                }
-
-                fn check_linear_read_conditions(&self) {
-                    // Ensure the ADC is enabled and is not in deeppowerdown-mode
-                    if self.rb.cr.read().deeppwd().bit_is_set() {
-                        panic!("Cannot read linear calibration value when the ADC is in deeppowerdown-mode");
-                    }
-                    if self.rb.cr.read().advregen().bit_is_clear() {
-                        panic!("Cannot read linear calibration value when the voltage regulator is disabled");
-                    }
-                    if self.rb.cr.read().aden().bit_is_clear() {
-                        panic!("Cannot read linear calibration value when the ADC is disabled");
-                    }
                 }
             }
 
