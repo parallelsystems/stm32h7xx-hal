@@ -2,6 +2,9 @@
 pub use embedded_hal::prelude::*;
 
 pub use crate::adc::AdcExt as _stm32h7xx_hal_adc_AdcExt;
+pub use crate::adc::HalEnabledAdc as _stm32h7xx_hal_adc_HalEnabledAdc;
+pub use crate::adc::HalDisabledAdc as _stm32h7xx_hal_adc_HalDisabledAdc;
+pub use crate::adc::HalAdc as _stm32h7xx_hal_adc_HalAdc;
 
 #[cfg(feature = "crc")]
 pub use crate::crc::CrcExt as _stm32h7xx_hal_crc_CrcExt;

@@ -1,5 +1,17 @@
 //! DMA1 and DMA2
 
+use core::marker::PhantomData;
+use core::ops::Deref;
+
+use crate::{
+    adc,
+    adc::{Adc, HalAdc},
+    i2c::I2c,
+    pac::{self, DMA1, DMA2, DMAMUX1},
+    rcc::{rec, rec::ResetEnable},
+    serial, spi,
+};
+
 use super::{
     config,
     traits::sealed::{Bits, Sealed},
@@ -7,16 +19,6 @@ use super::{
     CurrentBuffer, DmaDirection, FifoLevel, MemoryToPeripheral,
     PeripheralToMemory,
 };
-use core::marker::PhantomData;
-
-use crate::{
-    i2c::I2c,
-    pac::{self, DMA1, DMA2, DMAMUX1},
-    rcc::{rec, rec::ResetEnable},
-    serial, spi,
-};
-
-use core::ops::Deref;
 
 impl Sealed for DMA1 {}
 impl Sealed for DMA2 {}
@@ -931,6 +933,9 @@ peripheral_target_address!(
     (HAL: I2c<pac::I2C2>, txdr, u8, M2P, DMAReq::I2C2_TX_DMA),
     (HAL: I2c<pac::I2C3>, rxdr, u8, P2M, DMAReq::I2C3_RX_DMA),
     (HAL: I2c<pac::I2C3>, txdr, u8, M2P, DMAReq::I2C3_TX_DMA),
+    (HAL: Adc<pac::ADC1, adc::Enabled>, dr, u32, P2M, DMAReq::ADC1_DMA),
+    (HAL: Adc<pac::ADC2, adc::Enabled>, dr, u32, P2M, DMAReq::ADC2_DMA),
+    (HAL: Adc<pac::ADC3, adc::Enabled>, dr, u32, P2M, DMAReq::ADC3_DMA),
 );
 
 peripheral_target_address!(
