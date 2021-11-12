@@ -76,7 +76,9 @@ pub trait HalDisabledAdc: HalAdc {
     type Enabled: HalEnabledAdc<Disabled = Self>;
 
     /// Set the DMA property of the ADC
-    fn dma(&mut self, dma: Option<Dma>);
+    fn set_dma(&mut self, dma: Option<Dma>);
+
+    fn set_oversample(&mut self, oversample: u16);
 
     /// Disables Deeppowerdown-mode and enables voltage regulator
     ///
@@ -117,6 +119,10 @@ pub trait HalAdc {
 
     /// Get ADC sampling time
     fn get_sample_time(&self) -> AdcSampleTime;
+
+    fn get_oversample(&self) -> u16;
+
+    fn get_dma(&self) -> Option<Dma>;
 
     /// Get ADC sampling resolution
     fn get_resolution(&self) -> Resolution;
@@ -184,11 +190,30 @@ pub enum Dma {
     Circular,
 }
 
-pub struct Adc<ADC, ED> {
-    rb: ADC,
+#[derive(Clone)]
+struct Config {
     sample_time: AdcSampleTime,
+    dma: Option<Dma>,
+    oversample: u16,
     resolution: Resolution,
     lshift: AdcLshift,
+}
+
+impl  Default for Config {
+    fn default() -> Self {
+        Self {
+            sample_time: AdcSampleTime::default(),
+            dma: None,
+            oversample: 0,
+            resolution: Resolution::SIXTEENBIT,
+            lshift: AdcLshift::default(),
+        }
+    }
+}
+
+pub struct Adc<ADC, ED> {
+    rb: ADC,
+    config: Config,
     current_channel: Option<u8>,
     _enabled: PhantomData<ED>,
 }
@@ -586,9 +611,7 @@ macro_rules! adc_hal {
                 fn default_from_rb(rb: $ADC) -> Self {
                     Self {
                         rb,
-                        sample_time: AdcSampleTime::default(),
-                        resolution: Resolution::SIXTEENBIT,
-                        lshift: AdcLshift::default(),
+                        config: Config::default(),
                         current_channel: None,
                         _enabled: PhantomData,
                     }
@@ -637,13 +660,12 @@ macro_rules! adc_hal {
                     #[cfg(feature = "revision_v")]
                     self.rb.cr.modify(|_, w| w.boost().lt50());
                 }
-
             }
 
             impl HalDisabledAdc for Adc<$ADC, Disabled> {
                 type Enabled = Adc<$ADC, Enabled>;
 
-                fn dma(&mut self, dma: Option<Dma>){
+                fn set_dma(&mut self, dma: Option<Dma>){
                     let variant = match dma {
                         None => DMNGT_A::DR,
                         Some(Dma::OneShot) => DMNGT_A::DMA_ONESHOT,
@@ -652,6 +674,15 @@ macro_rules! adc_hal {
 
                     self.rb.cfgr.modify(|_,w|{
                         w.dmngt().variant(variant)
+                    });
+                }
+
+                fn set_oversample(&mut self, oversample: u16) {
+                    assert!(oversample >= 1 && oversample <= 1024);
+                    // since there is no 0x value. 1x is the identity
+                    let reg_value = oversample - 1;
+                    self.rb.cfgr2.modify(|_, w| {
+                        w.osvr().bits(reg_value)
                     });
                 }
 
@@ -697,9 +728,7 @@ macro_rules! adc_hal {
 
                     Adc {
                         rb: self.rb,
-                        sample_time: self.sample_time,
-                        resolution: self.resolution,
-                        lshift: self.lshift,
+                        config: self.config,
                         current_channel: None,
                         _enabled: PhantomData,
                     }
@@ -821,9 +850,7 @@ macro_rules! adc_hal {
 
                     Adc {
                         rb: self.rb,
-                        sample_time: self.sample_time,
-                        resolution: self.resolution,
-                        lshift: self.lshift,
+                        config: self.config,
                         current_channel: None,
                         _enabled: PhantomData,
                     }
@@ -875,27 +902,35 @@ macro_rules! adc_hal {
                 }
 
                 fn get_sample_time(&self) -> AdcSampleTime {
-                    self.sample_time
+                    self.config.sample_time
+                }
+
+                fn get_oversample(&self) -> u16 {
+                    self.config.oversample
+                }
+
+                fn get_dma(&self) -> Option<Dma> {
+                    self.config.dma
                 }
 
                 fn get_resolution(&self) -> Resolution {
-                    self.resolution
+                    self.config.resolution
                 }
 
                 fn get_lshift(&self) -> AdcLshift {
-                    self.lshift
+                    self.config.lshift
                 }
 
                 fn set_sample_time(&mut self, t_samp: AdcSampleTime) {
-                    self.sample_time = t_samp;
+                    self.config.sample_time = t_samp;
                 }
 
                 fn set_resolution(&mut self, res: Resolution) {
-                    self.resolution = res;
+                    self.config.resolution = res;
                 }
 
                 fn set_lshift(&mut self, lshift: AdcLshift) {
-                    self.lshift = lshift;
+                    self.config.lshift = lshift;
                 }
 
                 fn max_sample(&self) -> u32 {
