@@ -35,16 +35,17 @@
 //! ```
 
 use cast::u32;
-use cortex_m::peripheral::syst::SystClkSource;
 use cortex_m::peripheral::SYST;
-
-use crate::nb::block;
-use crate::rcc::CoreClocks;
-use crate::time::{Hertz, U32Ext};
+use cortex_m::peripheral::syst::SystClkSource;
 use embedded_hal::{
     blocking::delay::{DelayMs, DelayUs},
     timer::CountDown,
 };
+use void::Void;
+
+use crate::nb::block;
+use crate::rcc::CoreClocks;
+use crate::time::{Hertz, U32Ext};
 
 pub trait DelayExt {
     fn delay(self, clocks: CoreClocks) -> Delay;
@@ -60,6 +61,71 @@ impl DelayExt for SYST {
 pub struct Delay {
     clocks: CoreClocks,
     syst: SYST,
+}
+
+pub struct CountdownUs<'a> {
+    clocks: CoreClocks,
+    syst: &'a mut SYST,
+    total_rvr: u64,
+    current_rvr: u64,
+}
+
+impl CountdownUs {
+    fn start_wait(&mut self) {
+        // The SysTick Reload Value register supports values between 1 and 0x00FFFFFF.
+        const MAX_RVR: u32 = 0x00FF_FFFF;
+
+        if self.total_rvr != 0 {
+            let current_rvr = if total_rvr <= MAX_RVR.into() {
+                total_rvr as u32
+            } else {
+                MAX_RVR
+            };
+
+            self.syst.set_reload(current_rvr);
+            self.syst.clear_current();
+            self.syst.enable_counter();
+
+            self.current_rvr = current_rvr as u64;
+        }
+    }
+}
+
+impl CountDown for CountdownUs {
+    type Time = u32;
+
+    fn start<T>(&mut self, count: T) where T: Into<Self::Time> {
+        let count = count.into();
+
+        // With c_ck up to 480e6, we need u64 for delays > 8.9s
+
+        self.total_rvr = if cfg!(not(feature = "revision_v")) {
+            // See errata ES0392 §2.2.3. Revision Y does not have the /8 divider
+            u64::from(us) * u64::from(self.clocks.c_ck().0 / 1_000_000)
+        } else if cfg!(feature = "cm4") {
+            // CM4 dervived from HCLK
+            u64::from(us) * u64::from(self.clocks.hclk().0 / 8_000_000)
+        } else {
+            // Normally divide by 8
+            u64::from(us) * u64::from(self.clocks.c_ck().0 / 8_000_000)
+        };
+
+        self.start_wait();
+    }
+
+    fn wait(&mut self) -> nb::Result<(), Void> {
+        if self.total_rvr == 0 {
+            return Ok(())
+        }
+
+        if self.syst.has_wrapped() {
+            self.syst.disable_counter();
+            self.total_rvr -= self.current_rvr;
+            self.start_wait();
+        }
+
+        Err(nb::Error::WouldBlock)
+    }
 }
 
 impl Delay {
