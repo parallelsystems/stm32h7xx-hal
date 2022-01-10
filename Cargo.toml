@@ -1,6 +1,6 @@
 [package]
 name = "stm32h7xx-hal"
-version = "0.10.0"
+version = "0.11.0"
 authors = ["Andrew Straw <strawman@astraw.com>",
            "Richard Meadows <richard@richard.fish>",
            "Henrik Böving <hargonix@gmail.com>",
@@ -10,7 +10,7 @@ authors = ["Andrew Straw <strawman@astraw.com>",
            "Matthew Meyer <mtthw.meyer@gmail.com>",
            "Florian Jung <flo@windfisch.org>",
            "Matt Ickstadt <mattico8@gmail.com>"]
-edition = "2018"
+edition = "2021"
 categories = ["embedded", "hardware-support", "no-std"]
 description = "Hardware Abstraction Layer implementation for STM32H7 series microcontrollers"
 keywords = ["arm", "cortex-m", "stm32h7xx", "hal", "embedded-hal"]
@@ -21,14 +21,15 @@ readme = "README.md"
 exclude = [".gitignore"]
 
 [package.metadata.docs.rs]
-features = ["stm32h743v", "rt", "quadspi", "sdmmc", "fmc", "usb_hs", "rtc", "ethernet", "ltdc", "crc"]
+features = ["stm32h743v", "rt", "xspi", "sdmmc", "fmc", "usb_hs", "rtc", "ethernet", "ltdc", "crc", "rand", "defmt"]
 targets = ["thumbv7em-none-eabihf"]
 
 [dependencies]
 embedded-hal = "0.2.6"
 embedded-dma = {git = "https://github.com/andrewgazelka/embedded-dma", branch = "buffer-slices"}
-cortex-m = "^0.7.1"
-stm32h7 = "^0.14.0"
+cortex-m = "^0.7.4"
+defmt = { version = ">=0.2.0,<0.4", optional = true }
+stm32h7 = { version = "^0.14.0", default-features = false }
 void = { version = "1.0.2", default-features = false }
 cast = { version = "0.3.0", default-features = false }
 nb = "1.0.0"
@@ -41,9 +42,9 @@ synopsys-usb-otg = { version = "^0.2.4", features = ["cortex-m"], optional = tru
 embedded-display-controller = { version = "^0.1.0", optional = true }
 
 [dependencies.smoltcp]
-version = "0.7.0"
+version = "0.8.0"
 default-features = false
-features = ["ethernet", "proto-ipv4", "socket-raw"]
+features = ["medium-ethernet", "proto-ipv4", "socket-raw"]
 optional = true
 
 [dependencies.chrono]
@@ -51,9 +52,14 @@ version = "0.4"
 default-features = false
 optional = true
 
+[dependencies.rand_core]
+version = "0.6"
+default-features = false
+optional = true
+
 [dev-dependencies]
 cortex-m-rt = ">=0.6.15,<0.8"
-cortex-m-rtic = { version = "0.5.8", default-features = false, features = ["cortex-m-7"] }
+cortex-m-rtic = { version = "1.0.0" }
 log = "0.4.11"
 panic-halt = "0.2.0"
 panic-rtt-target = { version = "0.1.0", features = ["cortex-m"] }
@@ -68,12 +74,12 @@ usb-device = "0.2.5"
 usbd-serial = "0.1.0"
 
 [dev-dependencies.smoltcp]
-version = "0.7.0"
+version = "0.8.0"
 default-features = false
-features = ["ethernet", "proto-ipv4", "proto-ipv6", "socket-raw"]
+features = ["medium-ethernet", "proto-ipv4", "proto-ipv6", "socket-raw"]
 
 [features]
-default = ["unproven"]
+default = ["unproven", "rt"]
 unproven = ["embedded-hal/unproven"]
 device-selected = []
 revision_v = []
@@ -93,6 +99,7 @@ sdmmc-fatfs = ["embedded-sdmmc", "sdmmc"]
 ethernet = ["smoltcp"]
 rtc = ["chrono"]
 crc = []
+rand = ["rand_core"]
 rt = ["stm32h7/rt"]
 usb_hs = ["synopsys-usb-otg", "synopsys-usb-otg/hs"]
 stm32h742 = ["stm32h7/stm32h743", "device-selected", "rm0433"]
@@ -157,6 +164,10 @@ required-features = ["xspi", "rm0433"]
 
 [[example]]
 name = "octospi"
+required-features = ["xspi", "rm0468"]
+
+[[example]]
+name = "octospi_hyperram"
 required-features = ["xspi", "rm0468"]
 
 [[example]]
