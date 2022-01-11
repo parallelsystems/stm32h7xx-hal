@@ -35,8 +35,8 @@
 //! ```
 
 use cast::u32;
-use cortex_m::peripheral::SYST;
 use cortex_m::peripheral::syst::SystClkSource;
+use cortex_m::peripheral::SYST;
 use embedded_hal::{
     blocking::delay::{DelayMs, DelayUs},
     timer::CountDown,
@@ -70,7 +70,16 @@ pub struct CountdownUs<'a> {
     current_rvr: u64,
 }
 
-impl <'a> CountdownUs<'a> {
+impl<'a> CountdownUs<'a> {
+    pub fn new(syst: &'a mut SYST, clocks: CoreClocks) -> Self {
+        Self {
+            syst,
+            clocks,
+            total_rvr: 0,
+            current_rvr: 0,
+        }
+    }
+
     fn start_wait(&mut self) {
         // The SysTick Reload Value register supports values between 1 and 0x00FFFFFF.
         const MAX_RVR: u32 = 0x00FF_FFFF;
@@ -91,10 +100,13 @@ impl <'a> CountdownUs<'a> {
     }
 }
 
-impl <'a> CountDown for CountdownUs<'a> {
+impl<'a> CountDown for CountdownUs<'a> {
     type Time = u32;
 
-    fn start<T>(&mut self, count: T) where T: Into<Self::Time> {
+    fn start<T>(&mut self, count: T)
+    where
+        T: Into<Self::Time>,
+    {
         let us = count.into();
 
         // With c_ck up to 480e6, we need u64 for delays > 8.9s
@@ -115,7 +127,7 @@ impl <'a> CountDown for CountdownUs<'a> {
 
     fn wait(&mut self) -> nb::Result<(), Void> {
         if self.total_rvr == 0 {
-            return Ok(())
+            return Ok(());
         }
 
         if self.syst.has_wrapped() {
