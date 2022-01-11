@@ -70,14 +70,14 @@ pub struct CountdownUs<'a> {
     current_rvr: u64,
 }
 
-impl CountdownUs {
+impl <'a> CountdownUs<'a> {
     fn start_wait(&mut self) {
         // The SysTick Reload Value register supports values between 1 and 0x00FFFFFF.
         const MAX_RVR: u32 = 0x00FF_FFFF;
 
         if self.total_rvr != 0 {
-            let current_rvr = if total_rvr <= MAX_RVR.into() {
-                total_rvr as u32
+            let current_rvr = if self.total_rvr <= MAX_RVR.into() {
+                self.total_rvr as u32
             } else {
                 MAX_RVR
             };
@@ -91,11 +91,11 @@ impl CountdownUs {
     }
 }
 
-impl CountDown for CountdownUs {
+impl <'a> CountDown for CountdownUs<'a> {
     type Time = u32;
 
     fn start<T>(&mut self, count: T) where T: Into<Self::Time> {
-        let count = count.into();
+        let us = count.into();
 
         // With c_ck up to 480e6, we need u64 for delays > 8.9s
 
