@@ -67,7 +67,7 @@ pub struct CountdownUs<'a> {
     clocks: CoreClocks,
     syst: &'a mut SYST,
     total_rvr: u64,
-    current_rvr: u64,
+    finished: bool,
 }
 
 impl<'a> CountdownUs<'a> {
@@ -76,7 +76,7 @@ impl<'a> CountdownUs<'a> {
             syst,
             clocks,
             total_rvr: 0,
-            current_rvr: 0,
+            finished: true,
         }
     }
 
@@ -85,6 +85,7 @@ impl<'a> CountdownUs<'a> {
         const MAX_RVR: u32 = 0x00FF_FFFF;
 
         if self.total_rvr != 0 {
+            self.finished = false;
             let current_rvr = if self.total_rvr <= MAX_RVR.into() {
                 self.total_rvr as u32
             } else {
@@ -95,7 +96,10 @@ impl<'a> CountdownUs<'a> {
             self.syst.clear_current();
             self.syst.enable_counter();
 
-            self.current_rvr = current_rvr as u64;
+            self.total_rvr -= current_rvr as u64;
+
+        } else {
+            self.finished = true;
         }
     }
 }
@@ -126,13 +130,12 @@ impl<'a> CountDown for CountdownUs<'a> {
     }
 
     fn wait(&mut self) -> nb::Result<(), Void> {
-        if self.total_rvr == 0 {
+        if self.finished {
             return Ok(());
         }
 
         if self.syst.has_wrapped() {
             self.syst.disable_counter();
-            self.total_rvr -= self.current_rvr;
             self.start_wait();
         }
 
