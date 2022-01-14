@@ -97,7 +97,6 @@ impl<'a> CountdownUs<'a> {
             self.syst.enable_counter();
 
             self.total_rvr -= current_rvr as u64;
-
         } else {
             self.finished = true;
         }

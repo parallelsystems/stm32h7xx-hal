@@ -13,10 +13,10 @@
 use core::convert::Infallible;
 use core::marker::PhantomData;
 
+use crate::dma::traits::TargetAddress;
+use crate::dma::PeripheralToMemory;
 use nb::block;
 use stm32h7::stm32h743v::adc3::cfgr::DMNGT_A;
-use crate::dma::PeripheralToMemory;
-use crate::dma::traits::TargetAddress;
 
 use crate::gpio::gpioa::{PA0, PA1, PA2, PA3, PA4, PA5, PA6, PA7};
 use crate::gpio::gpiob::{PB0, PB1};
@@ -49,7 +49,9 @@ pub type Resolution = crate::stm32::adc3::cfgr::RES_A;
 #[cfg(any(feature = "rm0455", feature = "rm0468"))]
 pub type Resolution = crate::stm32::adc1::cfgr::RES_A;
 
-pub trait HalEnabledAdc: HalAdc + TargetAddress<PeripheralToMemory, MemSize=u32> {
+pub trait HalEnabledAdc:
+    HalAdc + TargetAddress<PeripheralToMemory, MemSize = u32>
+{
     type Disabled: HalDisabledAdc<Enabled = Self>;
 
     /// Start conversion
@@ -199,7 +201,7 @@ struct Config {
     lshift: AdcLshift,
 }
 
-impl  Default for Config {
+impl Default for Config {
     fn default() -> Self {
         Self {
             sample_time: AdcSampleTime::default(),
@@ -700,7 +702,7 @@ macro_rules! adc_hal {
                 }
 
                 fn set_oversample(&mut self, oversample: u16) {
-                    assert!(oversample >= 1 && oversample <= 1024);
+                    (1..=1024).contains(&oversample);
                     // since there is no 0x value. 1x is the identity
                     let reg_value = oversample - 1;
                     self.rb.cfgr2.modify(|_, w| {

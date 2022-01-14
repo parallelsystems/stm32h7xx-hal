@@ -874,7 +874,7 @@ where
     DIR: Direction,
     PERIPHERAL: TargetAddress<DIR>,
     BUF: WriteBuffer<Word = BUF_WORD>, // Buf can be sized independently
-                                             // from the peripheral
+                                       // from the peripheral
 {
     /// For a given configuration, determine the size and offset for the source
     /// and destination

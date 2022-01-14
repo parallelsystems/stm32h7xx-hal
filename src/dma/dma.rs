@@ -935,9 +935,27 @@ peripheral_target_address!(
     (HAL: I2c<pac::I2C2>, txdr, u8, M2P, DMAReq::I2C2_TX_DMA),
     (HAL: I2c<pac::I2C3>, rxdr, u8, P2M, DMAReq::I2C3_RX_DMA),
     (HAL: I2c<pac::I2C3>, txdr, u8, M2P, DMAReq::I2C3_TX_DMA),
-    (HAL: Adc<pac::ADC1, adc::Enabled>, dr, u32, P2M, DMAReq::ADC1_DMA),
-    (HAL: Adc<pac::ADC2, adc::Enabled>, dr, u32, P2M, DMAReq::ADC2_DMA),
-    (HAL: Adc<pac::ADC3, adc::Enabled>, dr, u32, P2M, DMAReq::ADC3_DMA),
+    (
+        HAL: Adc<pac::ADC1, adc::Enabled>,
+        dr,
+        u32,
+        P2M,
+        DMAReq::ADC1_DMA
+    ),
+    (
+        HAL: Adc<pac::ADC2, adc::Enabled>,
+        dr,
+        u32,
+        P2M,
+        DMAReq::ADC2_DMA
+    ),
+    (
+        HAL: Adc<pac::ADC3, adc::Enabled>,
+        dr,
+        u32,
+        P2M,
+        DMAReq::ADC3_DMA
+    ),
 );
 
 peripheral_target_address!(
