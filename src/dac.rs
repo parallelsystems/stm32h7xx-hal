@@ -24,7 +24,9 @@ pub struct EnabledUnbuffered;
 /// Disabled DAC (type state)
 pub struct Disabled;
 
+/// Enabled or disabled
 pub trait ED {}
+
 impl ED for Enabled {}
 impl ED for EnabledUnbuffered {}
 impl ED for Disabled {}
@@ -57,6 +59,41 @@ impl Pins<DAC1> for (gpio::PA4<Analog>, gpio::PA5<Analog>) {
     type Output = (C1<DAC1, Disabled>, C2<DAC1, Disabled>);
 }
 
+pub trait HalDac: DacOut<u16> {
+    type Dac;
+    type Enabled: HalEnabledDac<Dac = <Self as HalDac>::Dac>;
+    type EnabledUnbuffered: HalEnabledUnbufferedDac<Dac = <Self as HalDac>::Dac>;
+    type Disabled: HalDisabledDac<Dac = <Self as HalDac>::Dac>;
+
+    /// Calibrate the DAC output buffer by performing a "User
+    /// trimming" operation. It is useful when the VDDA/VREF+
+    /// voltage or temperature differ from the factory trimming
+    /// conditions.
+    ///
+    /// The calibration is only valid when the DAC channel is
+    /// operating with the buffer enabled. If applied in other
+    /// modes it has no effect.
+    ///
+    /// After the calibration operation, the DAC channel is
+    /// disabled.
+    fn calibrate_buffer<T>(self, delay: &mut T) -> Self::Disabled
+    where
+        T: DelayUs<u32>;
+
+    /// Disable the DAC channel
+    fn disable(self) -> Self::Disabled;
+}
+
+pub trait HalEnabledDac: HalDac<Enabled = Self> {}
+
+pub trait HalEnabledUnbufferedDac: HalDac<EnabledUnbuffered = Self> {}
+
+pub trait HalDisabledDac: HalDac<Disabled = Self> {
+    fn enable(self) -> Self::Enabled;
+
+    fn enable_unbuffered(self) -> Self::EnabledUnbuffered;
+}
+
 // DAC2
 
 #[cfg(feature = "rm0455")]
@@ -84,8 +121,8 @@ where
 macro_rules! dac {
     ($DAC:ident, $CX:ident, $en:ident, $cen:ident, $cal_flag:ident, $trim:ident,
      $mode:ident, $dhrx:ident, $dor:ident, $daccxdhr:ident) => {
-        impl $CX<$DAC, Disabled> {
-            pub fn enable(self) -> $CX<$DAC, Enabled> {
+        impl HalDisabledDac for $CX<$DAC, Disabled> {
+            fn enable(self) -> $CX<$DAC, Enabled> {
                 let dac = unsafe { &(*$DAC::ptr()) };
 
                 dac.mcr.modify(|_, w| unsafe { w.$mode().bits(0) });
@@ -97,7 +134,7 @@ macro_rules! dac {
                 }
             }
 
-            pub fn enable_unbuffered(self) -> $CX<$DAC, EnabledUnbuffered> {
+            fn enable_unbuffered(self) -> $CX<$DAC, EnabledUnbuffered> {
                 let dac = unsafe { &(*$DAC::ptr()) };
 
                 dac.mcr.modify(|_, w| unsafe { w.$mode().bits(2) });
@@ -110,22 +147,17 @@ macro_rules! dac {
             }
         }
 
-        impl<ED> $CX<$DAC, ED> {
-            /// Calibrate the DAC output buffer by performing a "User
-            /// trimming" operation. It is useful when the VDDA/VREF+
-            /// voltage or temperature differ from the factory trimming
-            /// conditions.
-            ///
-            /// The calibration is only valid when the DAC channel is
-            /// operating with the buffer enabled. If applied in other
-            /// modes it has no effect.
-            ///
-            /// After the calibration operation, the DAC channel is
-            /// disabled.
-            pub fn calibrate_buffer<T>(
-                self,
-                delay: &mut T,
-            ) -> $CX<$DAC, Disabled>
+        impl HalEnabledDac for $CX<$DAC, Enabled> {}
+
+        impl HalEnabledUnbufferedDac for $CX<$DAC, EnabledUnbuffered> {}
+
+        impl<ED> HalDac for $CX<$DAC, ED> {
+            type Dac = $DAC;
+            type Enabled = $CX<$DAC, Enabled>;
+            type EnabledUnbuffered = $CX<$DAC, EnabledUnbuffered>;
+            type Disabled = $CX<$DAC, Disabled>;
+
+            fn calibrate_buffer<T>(self, delay: &mut T) -> $CX<$DAC, Disabled>
             where
                 T: DelayUs<u32>,
             {
@@ -150,8 +182,7 @@ macro_rules! dac {
                 }
             }
 
-            /// Disable the DAC channel
-            pub fn disable(self) -> $CX<$DAC, Disabled> {
+            fn disable(self) -> $CX<$DAC, Disabled> {
                 let dac = unsafe { &(*$DAC::ptr()) };
                 dac.cr.modify(|_, w| w.$en().clear_bit());
 
