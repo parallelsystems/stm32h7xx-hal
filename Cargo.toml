@@ -49,7 +49,8 @@ bitflags = { version = "2.0.0" }
 embedded-storage = "0.3"
 
 [dependencies.smoltcp]
-version = "0.9.0"
+git = "https://github.com/parallelsystems/smoltcp.git"
+rev = "3755e86b89015dc0ac0969a12906c680c7a2a3db"
 default-features = false
 features = ["medium-ethernet", "proto-ipv4", "socket-raw"]
 optional = true
@@ -84,7 +85,8 @@ tinybmp = "0.4"
 embedded-graphics = "0.7"
 
 [dev-dependencies.smoltcp]
-version = "0.9.0"
+git = "https://github.com/parallelsystems/smoltcp.git"
+rev = "3755e86b89015dc0ac0969a12906c680c7a2a3db"
 default-features = false
 features = ["medium-ethernet", "proto-ipv4", "proto-ipv6", "socket-raw"]
 
