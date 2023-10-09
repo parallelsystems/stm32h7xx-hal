@@ -704,8 +704,10 @@ impl<'dma, 'tx> TxToken for EthTxToken<'dma, 'tx> {
 
         // NOTE(unwrap): an `EthTxToken` is only created if
         // there is a descriptor available for sending.
+        defmt::info!("in consume!");
         let tx_result = self.tx_ring.send_next(len, meta);
         if tx_result.is_err() {
+            defmt::info!("is error!");
             if let Err(TxError::BufferTooShort) = tx_result {
                 defmt::info!("buffer too short!");
                 return f(&mut [0u8]);
