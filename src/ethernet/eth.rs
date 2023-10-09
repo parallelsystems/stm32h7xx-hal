@@ -707,6 +707,7 @@ impl<'dma, 'tx> TxToken for EthTxToken<'dma, 'tx> {
         let tx_result = self.tx_ring.send_next(len, meta);
         if tx_result.is_err() {
             if let Err(TxError::BufferTooShort) = tx_result {
+                defmt::info!("buffer too short!");
                 return f(&mut [0u8]);
             }
         }
