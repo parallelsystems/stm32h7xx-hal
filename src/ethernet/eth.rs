@@ -706,6 +706,7 @@ impl<'dma, 'tx> TxToken for EthTxToken<'dma, 'tx> {
         // there is a descriptor available for sending.
         defmt::info!("in consume!");
         let tx_result = self.tx_ring.send_next(len, meta);
+        defmt::info!("made it past send_next");
         if tx_result.is_err() {
             defmt::info!("is error!");
             if let Err(TxError::BufferTooShort) = tx_result {
