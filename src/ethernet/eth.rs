@@ -706,7 +706,9 @@ impl<'dma, 'tx> TxToken for EthTxToken<'dma, 'tx> {
         // there is a descriptor available for sending.
         let tx_result = self.tx_ring.send_next(len, meta);
         if tx_result.is_err() {
-            return f(&mut [0u8; 1]);
+            if let Err(TxError::BufferTooShort) = tx_result {
+                return f(&mut [0u8]);
+            }
         }
         let mut tx_packet = tx_result.ok().unwrap();
         let res = f(&mut tx_packet);
