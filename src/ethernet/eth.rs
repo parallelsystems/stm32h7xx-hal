@@ -661,7 +661,11 @@ impl<'dma, 'rx> RxToken for EthRxToken<'dma, 'rx> {
         let meta = None;
 
         // NOTE(unwrap): an `EthRxToken` is only created when `eth.rx_available()`
-        let mut packet = self.rx_ring.recv_next(meta).ok().unwrap();
+        let result = self.rx_ring.recv_next(meta);
+        if result.is_err() {
+            defmt::info!("recv is err!");
+        }
+        let mut packet = result.ok().unwrap();
         #[cfg(feature = "ptp")]
         {
             let ethertype =

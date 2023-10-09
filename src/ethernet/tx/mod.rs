@@ -150,6 +150,7 @@ impl<'ring> TxRing<'ring> {
         let (desc, tx_buffer) = self.ring.get_mut(entry);
 
         if length > tx_buffer.len() {
+            defmt::info!("too short!");
             return Err(TxError::BufferTooShort);
         }
         // assert!(length <= tx_buffer.len(), "Not enough space in TX buffer");
