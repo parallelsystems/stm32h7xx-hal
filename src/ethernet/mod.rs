@@ -70,7 +70,7 @@ pub trait PinsRMII {
 
 // ***VERIFY THIS!!!!!***
 /// From the datasheet: *VLAN Frame maxsize = 1522*
-pub const MTU: usize = 1522;
+pub const MTU: usize = 1534;
 
 // Two lanes
 impl<REF_CLK, MDIO, MDC, CRS_DV, RXD0, RXD1, TX_EN, TXD0, TXD1> PinsRMII
