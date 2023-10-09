@@ -713,6 +713,11 @@ impl<'dma, 'tx> TxToken for EthTxToken<'dma, 'tx> {
                 return f(&mut [0u8]);
             }
         }
+        if tx_result.is_ok() {
+            defmt::info!("its ok!");
+        } else {
+            defmt::info!("not ok!");
+        }
         let mut tx_packet = tx_result.ok().unwrap();
         defmt::info!("made it past send_next");
         let res = f(&mut tx_packet);
