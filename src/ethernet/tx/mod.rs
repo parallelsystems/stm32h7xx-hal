@@ -25,6 +25,8 @@ pub type TxDescriptorRing<'rx> = DescriptorRing<'rx, TxDescriptor>;
 pub enum TxError {
     /// Ring buffer is full
     WouldBlock,
+    /// Tx buffer length is insufficient
+    BufferTooShort,
 }
 
 /// Tx DMA state
@@ -147,7 +149,10 @@ impl<'ring> TxRing<'ring> {
 
         let (desc, tx_buffer) = self.ring.get_mut(entry);
 
-        assert!(length <= tx_buffer.len(), "Not enough space in TX buffer");
+        if length <= tx_buffer.len() {
+            return TxError::BufferTooShort;
+        }
+        // assert!(length <= tx_buffer.len(), "Not enough space in TX buffer");
 
         Ok(TxPacket {
             desc,
@@ -170,7 +175,7 @@ impl<'ring> TxRing<'ring> {
         &'tx mut self,
         length: usize,
         packet_id: Option<PacketId>,
-    ) -> TxPacket {
+    ) -> Result<TxPacket, TxError> {
         let entry = core::future::poll_fn(|ctx| match self.send_next_impl() {
             Ok(packet) => Poll::Ready(packet),
             Err(_) => {
@@ -182,14 +187,17 @@ impl<'ring> TxRing<'ring> {
 
         let (desc, tx_buffer) = self.ring.get_mut(entry);
 
-        assert!(length <= tx_buffer.len(), "Not enough space in TX buffer");
+        if length <= tx_buffer.len() {
+            return Err(TxError::BufferTooShort);
+        }
+        // assert!(length <= tx_buffer.len(), "Not enough space in TX buffer");
 
-        TxPacket {
+        Ok(TxPacket {
             desc,
             buffer: tx_buffer,
             length,
             packet_id,
-        }
+        })
     }
 
     /// Demand that the DMA engine polls the current `TxDescriptor`

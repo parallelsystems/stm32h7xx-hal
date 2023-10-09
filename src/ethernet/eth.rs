@@ -704,7 +704,15 @@ impl<'dma, 'tx> TxToken for EthTxToken<'dma, 'tx> {
 
         // NOTE(unwrap): an `EthTxToken` is only created if
         // there is a descriptor available for sending.
-        let mut tx_packet = self.tx_ring.send_next(len, meta).ok().unwrap();
+        let tx_result = self.tx_ring.send_next(len, meta);
+        if tx_result.is_err() {
+            if tx_result.err().unwrap() == TxError::BufferTooShort {
+                defmt::info!("buffer was too short!")
+            } else {
+                defmt::info!("other error!");
+            }
+        }
+        let mut tx_packet = tx_result.ok().unwrap();
         let res = f(&mut tx_packet);
         tx_packet.send();
         res
@@ -1108,7 +1116,7 @@ impl<'rx, 'tx> EthernetDMA<'rx, 'tx> {
         &mut self,
         length: usize,
         packet_id: Option<PacketId>,
-    ) -> TxPacket {
+    ) -> Result<TxPacket, TxError> {
         self.tx_ring.prepare_packet(length, packet_id).await
     }
 
